@@ -1,0 +1,127 @@
+### Dataset
+
+```{r}
+library(readxl)
+```
+
+```{r}
+df <- read.csv("C:/Users/yunia/Downloads/AirPassengers.csv")
+head(df)
+```
+
+```{r}
+library(ggplot2)
+plot(df$X.Passengers,
+     type = "l",          # "l" = line chart
+     xlab = "Month",
+     ylab = "Passengers",
+     main = "Time Series of Passengers")
+```
+
+```{r}
+df <- na.omit(df)
+dat <- data.frame(
+  time = 1:nrow(df),
+  passengers = df$X.Passengers
+)
+```
+
+#### Transformasi log
+
+```{r}
+dat$logP <- log(dat$passengers)
+```
+
+#### Lag untuk time series
+
+```{r}
+dat$lag1  <- dplyr::lag(dat$logP, 1)
+dat$lag12 <- dplyr::lag(dat$logP, 12)
+
+dat <- na.omit(dat)   # hapus baris yang mengandung NA
+```
+
+#### Split Training dan Testing
+
+```{r}
+n <- nrow(dat)
+split <- floor(0.8 * n)
+
+train <- dat[1:split, ]
+test  <- dat[(split+1):n, ]
+```
+
+### Regresi time series
+
+```{r}
+reg_ts <- lm(logP ~ lag1 + lag12, data=train)
+summary(reg_ts)
+```
+
+```{r}
+yhat_reg_test <- predict(reg_ts, newdata=test)
+
+yhat_reg_real <- exp(yhat_reg_test)
+
+e_reg <- test$passengers - yhat_reg_real
+
+cat("MSE Reg =", mean(e_reg^2), "\n")
+cat("MAPE Reg =", mean(abs(e_reg / test$passengers)), "\n")
+```
+
+### Neural network
+
+```{r}
+library(neuralnet)
+```
+
+```{r}
+nn_ts <- neuralnet(logP ~ lag1 + lag12,
+                   data=train,
+                   hidden=3,
+                   rep=5)
+```
+
+```{r}
+plot(nn_ts, rep = 5)
+```
+
+```{r}
+nn_pred_log <- predict(nn_ts, test[, c("lag1","lag12")])
+
+nn_pred <- exp(nn_pred_log)
+
+e_nn <- test$passengers - nn_pred
+
+cat("MSE NN =", mean(e_nn^2), "\n")
+cat("MAPE NN =", mean(abs(e_nn / test$passengers)), "\n")
+
+```
+
+### Hasil
+
+```{r}
+HASIL <- data.frame(
+  waktu = test$time,
+  aktual = test$passengers,
+  reg_pred = yhat_reg_real,
+  nn_pred = nn_pred
+)
+
+print(HASIL)
+
+```
+
+```{r}
+plot(test$time, test$passengers, type="l", col="red", lwd=2,
+     xlab="Waktu", ylab="Penumpang",
+     main="Prediksi Time Series AirPassengers (Reg vs NN)")
+
+lines(test$time, yhat_reg_real, col="green", lwd=2)
+lines(test$time, nn_pred, col="blue", lwd=2)
+
+legend("topleft",
+       c("Aktual", "Regresi", "NeuralNet"),
+       col=c("red","green","blue"), lwd=2)
+
+```
